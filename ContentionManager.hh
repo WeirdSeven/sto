@@ -21,7 +21,6 @@ public:
     // Global timestamp
     static uint64_t ts;
 
-    // TODO: Change these varaibles to be transaction members
     static uint128_t aborted[32];
     static uint128_t timestamp[32];
     static uint128_t write_set_size[32];

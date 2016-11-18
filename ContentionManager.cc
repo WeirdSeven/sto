@@ -6,10 +6,7 @@
 #define WAIT_CYCLES_MULTIPLICATOR 8000
 
 bool ContentionManager::should_abort(Transaction* tx, WriteLock wlock) {
-	//printf("In CM::should_abort.\n");
     int threadid = tx->threadid();
-    //printf("CM::should_abort: threadid = [%d].\n", threadid);
-    //printf("CM::should_abort: abort_count = [%d].\n", (int)abort_count[threadid]);
     if (aborted[threadid] == 1)
         return true;
 
@@ -31,10 +28,7 @@ bool ContentionManager::should_abort(Transaction* tx, WriteLock wlock) {
 }
 
 void ContentionManager::on_write(Transaction* tx) {
-	//printf("In CM::on_write.\n");
     int threadid = tx->threadid();
-    //printf("CM::on_write: thread id is [%d].\n", threadid);
-    //printf("CM::on_write: abort_count = [%d].\n", (int)abort_count[threadid]);
     write_set_size[threadid] += 1;
     if (ts == MAX_TS && write_set_size[threadid] == TS_THRESHOLD) {
         timestamp[threadid] = fetch_and_add(&ts, uint64_t(1));
@@ -42,7 +36,6 @@ void ContentionManager::on_write(Transaction* tx) {
 }
 
 void ContentionManager::start(Transaction *tx) {
-	//printf("In CM::start.\n");
     int threadid = tx->threadid();
     if (tx->is_restarted()) {
         // Do not reset timestamp and abort count
@@ -61,13 +54,10 @@ void ContentionManager::start(Transaction *tx) {
 
 void ContentionManager::on_rollback(Transaction *tx) {
     int threadid = tx->threadid();
-    //printf("CM::on_rollback: threadid = [%d].\n", threadid);
     if (abort_count[threadid] < SUCC_ABORTS_MAX)
         ++abort_count[threadid];
     uint64_t cycles_to_wait = rand() % (abort_count[threadid] * WAIT_CYCLES_MULTIPLICATOR);
-    //printf("CM::on_rollback: before wait.\n");
     wait_cycles(cycles_to_wait);
-    //printf("CM::on_rollback: after wait.\n");
  }
 
 // Defines and initializes the static fields
