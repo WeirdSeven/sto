@@ -1,3 +1,14 @@
+Introduction
+------------
+This fork adds mixed invalidation to STO.
+Files to look at:
+```
+	ContentionManager.hh
+	ContentionManager.cc
+	SwissTArray.hh
+	unit-swisstarray.cc
+```
+
 Install
 -------
 ```
