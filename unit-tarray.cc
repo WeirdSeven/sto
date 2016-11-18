@@ -9,23 +9,15 @@
 
 void testSimpleInt() {
 	TArray<int, 100> f;
-    std::cout << "Array defined." << std::endl;
 
     {
         TransactionGuard t;
-        std::cout << "Before f[1] is written." << std::endl;
         f[1] = 100;
-        std::cout << "After f[1] is written." << std::endl;
     }
 
 	{
         TransactionGuard t2;
-        std::cout << "Before f[1] is read." << std::endl;
         int f_read = f[1];
-        std::cout << "After f[1] is read." << std::endl;
-        std::cout << "Before f[1] is read 2." << std::endl;
-        TArray<int, 100>::const_proxy_type f_read2 = f[1];
-        std::cout << "After f[1] is read 2." << std::endl;
         assert(f_read == 100);
     }
 
@@ -250,7 +242,7 @@ void testNoOpacity1() {
 
 int main() {
     testSimpleInt();
-    /*testSimpleString();
+    testSimpleString();
     testIter();
     testConflictingIter();
     testModifyingIter();
@@ -258,6 +250,6 @@ int main() {
     testConflictingModifyIter2();
     testConflictingModifyIter3();
     testOpacity1();
-    testNoOpacity1();*/
+    testNoOpacity1();
     return 0;
 }

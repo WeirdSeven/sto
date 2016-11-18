@@ -3,6 +3,7 @@
 #include <typeinfo>
 #include <bitset>
 
+
 Transaction::testing_type Transaction::testing;
 threadinfo_t Transaction::tinfo[MAX_THREADS];
 __thread int TThread::the_id;
@@ -38,7 +39,6 @@ Transaction::~Transaction() {
     for (unsigned i = 0; i != arraysize(tset_); ++i, live += tset_chunk)
         if (live != tset_[i])
             delete[] tset_[i];
-    std::cout << "Destructor: " << threadid_ << std::endl;
 }
 
 void Transaction::refresh_tset_chunk() {
@@ -163,11 +163,9 @@ void Transaction::stop(bool committed, unsigned* writeset, unsigned nwriteset) {
     TXP_ACCOUNT(txp_max_transbuffer, buf_.buffer_size());
     TXP_ACCOUNT(txp_total_transbuffer, buf_.buffer_size());
 
-
     TransItem* it;
     if (!any_writes_)
         goto after_unlock;
-
 
     if (committed && !STO_SORT_WRITESET) {
         for (unsigned* idxit = writeset + nwriteset; idxit != writeset; ) {
@@ -176,9 +174,8 @@ void Transaction::stop(bool committed, unsigned* writeset, unsigned nwriteset) {
                 it = &tset0_[*idxit];
             else
                 it = &tset_[*idxit / tset_chunk][*idxit % tset_chunk];
-            if (it->needs_unlock()) {
+            if (it->needs_unlock())
                 it->owner()->unlock(*it);
-            }
         }
         for (unsigned* idxit = writeset + nwriteset; idxit != writeset; ) {
             --idxit;
@@ -244,7 +241,6 @@ bool Transaction::try_commit() {
         return true;
     }
 #endif
-
 
     state_ = s_committing;
 
@@ -327,7 +323,6 @@ bool Transaction::try_commit() {
 
     // fence();
 
-
     //phase3
 #if STO_SORT_WRITESET
     for (unsigned tidx = first_write_; tidx != tset_size_; ++tidx) {
@@ -341,20 +336,15 @@ bool Transaction::try_commit() {
     if (nwriteset) {
         auto writeset_end = writeset + nwriteset;
         for (auto idxit = writeset; idxit != writeset_end; ++idxit) {
-            if (likely(*idxit < tset_initial_capacity)) {
+            if (likely(*idxit < tset_initial_capacity))
                 it = &tset0_[*idxit];
-            }
-            else {
+            else
                 it = &tset_[*idxit / tset_chunk][*idxit % tset_chunk];
-            }
             TXP_INCREMENT(txp_total_w);
             it->owner()->install(*it, *this);
         }
     }
 #endif
-
-
-
 
     // fence();
     stop(true, writeset, nwriteset);
