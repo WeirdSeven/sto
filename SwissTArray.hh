@@ -6,6 +6,7 @@
 #include "ContentionManager.hh"
 #include <limits.h>
 #include <bitset>
+#include <fstream>
 
 
 template <typename T, unsigned N, template <typename> class W = TOpaqueWrapped>
@@ -70,7 +71,12 @@ public:
 
     // transactional methods
     bool lock(TransItem& item, Transaction& txn) override {
+        //int threadid = txn.threadid();
+        //std::ofstream outfile;
+        //outfile.open(std::to_string(threadid), std::ios_base::app);
+        //outfile << "In the lock callback!" << std::endl;
         return txn.try_lock(item, data_[item.key<size_type>()].vers);
+        //outfile.close();
     }
     bool check(TransItem& item, Transaction&) override {
         return item.check_version(data_[item.key<size_type>()].vers);
@@ -82,8 +88,10 @@ public:
         txn.set_version_unlock(data_[i].wlock, item);
     }
     void unlock(TransItem& item) override {
-        data_[item.key<size_type>()].vers.unlock();
-        data_[item.key<size_type>()].wlock.unlock();
+        if (data_[item.key<size_type>()].vers.is_locked())
+            data_[item.key<size_type>()].vers.unlock();
+        if (data_[item.key<size_type>()].wlock.is_locked())
+            data_[item.key<size_type>()].wlock.unlock();
     }
 
 private:
@@ -269,29 +277,36 @@ inline TransProxy& TransProxy::add_swiss_write(T&& wdata, WriteLock& wlock) {
 template <typename T, typename... Args>
 inline TransProxy& TransProxy::add_swiss_write(Args&&... args, WriteLock& wlock) {
     //std::cout << "Add swiss write: threadid=[" << t()->threadid() << "]" << std::endl; 
+    //int threadid = t()->threadid();
+    //std::ofstream outfile;
+    //outfile.open(std::to_string(threadid), std::ios_base::app);
     if (wlock.is_locked_here()) {
         //printf("add_swiss_write: is locked here.\n");
         item().wdata_ = Packer<T>::repack(t()->buf_, item().wdata_, std::forward<Args>(args)...);
         return *this;
     }
 
-
+    //outfile << "Key = [" << item().key<unsigned>() << "]" << std::endl;
     while(true) {
         if (wlock.is_locked()) {
             if (ContentionManager::should_abort(t(), wlock)) {
-                Sto::abort();
+                //outfile << "Result: Yes, abort." << std::endl;
+                Sto::wwc_abort();
             } else {
+                //outfile << "Result: No. do not abort." << std::endl;
                 continue;
             }
         }
 
-        if (wlock.try_lock())
-                break;
+        if (wlock.try_lock()){
+            //outfile << "Lock aquired: threadid = [" << t()->threadid() << "]" << std::endl;
+            break;
+        }
     }      
  
 
     if (!has_write()) {
-        item().__or_flags(TransItem::write_bit);
+        item().__or_flags(TransItem::write_bit | TransItem::lock_bit);
         item().wdata_ = Packer<T>::pack(t()->buf_, std::forward<Args>(args)...);
         t()->any_writes_ = true;
     } else
@@ -302,6 +317,7 @@ inline TransProxy& TransProxy::add_swiss_write(Args&&... args, WriteLock& wlock)
         item().wdata_ = Packer<T>::repack(t()->buf_, item().wdata_, std::forward<Args>(args)...);
 
     ContentionManager::on_write(t());
+    //outfile.close();
     return *this;
 }
 

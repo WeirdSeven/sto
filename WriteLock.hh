@@ -1,4 +1,6 @@
 #pragma once
 #include "Interface.hh"
 
-typedef TVersion WriteLock;
+typedef TNonopaqueVersion WriteLock;
+
+//typedef TVersion WriteLock;

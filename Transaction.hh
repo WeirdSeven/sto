@@ -11,9 +11,10 @@
 #include <unistd.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 #ifndef STO_PROFILE_COUNTERS
-#define STO_PROFILE_COUNTERS 0
+#define STO_PROFILE_COUNTERS 1
 #endif
 
 #ifndef STO_DEBUG_HASH_COLLISIONS
@@ -476,6 +477,13 @@ public:
         throw Abort();
     }
 
+    void wwc_abort() {
+        // FIXME: Add a new state 
+        state_ = s_committing_locked;
+        silent_abort();
+        throw Abort();
+    }
+
     bool try_commit();
 
     void commit() {
@@ -687,6 +695,11 @@ public:
         TThread::txn->abort();
     }
 
+    static void wwc_abort() {
+        always_assert(in_progress());
+        TThread::txn->wwc_abort();
+    }
+
     static void silent_abort() {
         if (in_progress())
             TThread::txn->silent_abort();
@@ -848,9 +861,18 @@ inline TransProxy& TransProxy::add_read_opaque(T rdata) {
 
 inline TransProxy& TransProxy::observe(TVersion version, bool add_read) {
     assert(!has_stash());
-    if (version.is_locked_elsewhere(t()->threadid_))
+    //int threadid = t()->threadid();
+    //std::ofstream outfile;
+    //outfile.open(std::to_string(threadid), std::ios_base::app);
+    //outfile << "A1" << std::endl;
+    if (version.is_locked_elsewhere(t()->threadid_)) {
+        //outfile << "A2" << std::endl;
         t()->abort_because(item(), "locked", version.value());
+        //outfile << "A3" << std::endl;
+    }
+    //outfile << "A4" << std::endl;
     t()->check_opacity(item(), version.value());
+    //outfile << "A5" << std::endl;
     if (add_read && !has_read()) {
         item().__or_flags(TransItem::read_bit);
         item().rdata_ = Packer<TVersion>::pack(t()->buf_, std::move(version));

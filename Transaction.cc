@@ -2,6 +2,7 @@
 #include "ContentionManager.hh"
 #include <typeinfo>
 #include <bitset>
+#include <fstream>
 
 
 Transaction::testing_type Transaction::testing;
@@ -141,6 +142,12 @@ void Transaction::hard_check_opacity(TransItem* item, TransactionTid::type t) {
 }
 
 void Transaction::stop(bool committed, unsigned* writeset, unsigned nwriteset) {
+    //std::ofstream outfile;
+    //outfile.open(std::to_string(threadid_), std::ios_base::app);
+    //if (committed)
+    //    outfile << "Thread [" << threadid_ << " has committed!" << std::endl;
+    //else
+    //    outfile << "Thread [" << threadid_ << " is aborting!" << std::endl;
     if (!committed) {
         TXP_INCREMENT(txp_total_aborts);
 #if STO_DEBUG_ABORTS
@@ -163,11 +170,16 @@ void Transaction::stop(bool committed, unsigned* writeset, unsigned nwriteset) {
     TXP_ACCOUNT(txp_max_transbuffer, buf_.buffer_size());
     TXP_ACCOUNT(txp_total_transbuffer, buf_.buffer_size());
 
+    //outfile << "P1" << std::endl;
+
     TransItem* it;
-    if (!any_writes_)
+    if (!any_writes_) 
         goto after_unlock;
 
+    //outfile << "P2" << std::endl;
+
     if (committed && !STO_SORT_WRITESET) {
+        //outfile << "P3" << std::endl;
         for (unsigned* idxit = writeset + nwriteset; idxit != writeset; ) {
             --idxit;
             if (*idxit < tset_initial_capacity)
@@ -187,14 +199,20 @@ void Transaction::stop(bool committed, unsigned* writeset, unsigned nwriteset) {
                 it->owner()->cleanup(*it, committed);
         }
     } else {
-        if (state_ == s_committing_locked) {
+        //outfile << "PP4" << std::endl;
+        //if (state_ == s_committing_locked) {
+            //outfile << "P5" << std::endl;
             it = &tset_[tset_size_ / tset_chunk][tset_size_ % tset_chunk];
             for (unsigned tidx = tset_size_; tidx != first_write_; --tidx) {
+                //outfile << "P6" << std::endl;
                 it = (tidx % tset_chunk ? it - 1 : &tset_[(tidx - 1) / tset_chunk][tset_chunk - 1]);
-                if (it->needs_unlock())
+                if (it->needs_unlock()) {
+                    //outfile << "P7" << std::endl;
+                    //outfile << "Unlocking item[" << it->key<unsigned>() << "]" << std::endl;
                     it->owner()->unlock(*it);
+                }
             }
-        }
+        //}
         it = &tset_[tset_size_ / tset_chunk][tset_size_ % tset_chunk];
         for (unsigned tidx = tset_size_; tidx != first_write_; --tidx) {
             it = (tidx % tset_chunk ? it - 1 : &tset_[(tidx - 1) / tset_chunk][tset_chunk - 1]);
@@ -213,11 +231,17 @@ after_unlock:
     restarted = true;
     if (!committed) {
         ContentionManager::on_rollback(this);
-    }  
+    } 
+    //outfile << "Stop finished!" << std::endl; 
+    //outfile.close();
 }
 
 bool Transaction::try_commit() {
     assert(TThread::id() == threadid_);
+    //std::ofstream outfile;
+    //outfile.open(std::to_string(threadid_), std::ios_base::app);
+    //std::cout << "Thread [" << threadid_ << "] committing!" << std::endl;
+    //outfile << "Thread [" << threadid_ << "] committing!" << std::endl;
 #if ASSERT_TX_SIZE
     if (tset_size_ > TX_SIZE_LIMIT) {
         std::cerr << "transSet_ size at " << tset_size_
@@ -229,8 +253,10 @@ bool Transaction::try_commit() {
     TXP_ACCOUNT(txp_total_n, tset_size_);
 
     assert(state_ == s_in_progress || state_ >= s_aborted);
-    if (state_ >= s_aborted)
+    if (state_ >= s_aborted) {
+        //outfile.close();
         return state_ > s_aborted;
+    }
 
     if (any_nonopaque_)
         TXP_INCREMENT(txp_commit_time_nonopaque);
@@ -301,6 +327,8 @@ bool Transaction::try_commit() {
     }
 #endif
 
+    //outfile << "Thread [" << threadid_ << "] committing! Phase 1 finished" << std::endl;
+
 
 #if CONSISTENCY_CHECK
     fence();
@@ -323,6 +351,8 @@ bool Transaction::try_commit() {
 
     // fence();
 
+    //outfile << "Thread [" << threadid_ << "] committing! Phase 2 finished" << std::endl;
+
     //phase3
 #if STO_SORT_WRITESET
     for (unsigned tidx = first_write_; tidx != tset_size_; ++tidx) {
@@ -341,16 +371,22 @@ bool Transaction::try_commit() {
             else
                 it = &tset_[*idxit / tset_chunk][*idxit % tset_chunk];
             TXP_INCREMENT(txp_total_w);
+            //outfile << "Thread [" << threadid_ << "] committing! Item [" << it->key<unsigned>() << "] installing!" << std::endl;
             it->owner()->install(*it, *this);
+            //outfile << "Thread [" << threadid_ << "] committing! Item [" << it->key<unsigned>() << "] installed!" << std::endl;
         }
     }
 #endif
+
+    //outfile << "Thread [" << threadid_ << "] committing! Phase 3 finished" << std::endl;
+
 
     // fence();
     stop(true, writeset, nwriteset);
     return true;
 
 abort:
+    //outfile.close();
     // fence();
     TXP_INCREMENT(txp_commit_time_aborts);
     stop(false, nullptr, 0);

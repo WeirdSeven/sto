@@ -61,9 +61,41 @@ void testWriteWriteConflict() {
 	printf("PASS: %s\n", __FUNCTION__);
 }
 
+void testAbortReleaseLock() {
+	std::cout << "Starting test abort release lock!" << std::endl;
+	SwissTArray<int, 100> f;
+
+	{
+		TestTransaction t1(1);
+
+		TestTransaction t2(2);
+
+		try {
+			t1.use();
+			f[1] = 100;
+
+			t2.use();
+			f[2] = 200;
+			f[1] = 300;
+		} catch(Transaction::Abort e) {
+
+		}
+
+		assert(t2.get_tx().is_restarted());
+
+		t1.use();
+		f[2] = 400;
+		f[1] = 500;
+		assert(t1.try_commit());
+
+	}
+	printf("PASS: %s\n", __FUNCTION__);
+}
+
 int main() {
     //testSimpleInt();
     testWriteWriteConflict();
+    testAbortReleaseLock();
     std::cout << "Tests finished." << std::endl;
     return 0;
 }

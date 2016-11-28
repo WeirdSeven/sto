@@ -4,6 +4,7 @@
 #include <climits>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <fstream>
 
 #include "TArray.hh"
 #include "TGeneric.hh"
@@ -22,7 +23,7 @@
 // size of array (for hashtables or other non-array structures, this is the
 // size of the key space)
 #ifndef ARRAY_SZ
-#define ARRAY_SZ 10000000
+#define ARRAY_SZ 10000
 #endif
 
 #define USE_ARRAY 0
@@ -170,7 +171,7 @@ private:
 };
 
 template <> struct Container<USE_SWISSARRAY> {
-    typedef SwissTArray<value_type, ARRAY_SZ> type;
+    typedef SwissTArray<value_type, ARRAY_SZ, TNonopaqueWrapped> type;
     typedef int index_type;
     static constexpr bool has_delete = false;
     value_type nontrans_get(index_type key) {
@@ -975,6 +976,7 @@ template <int DS> void InterferingRWs<DS>::run(int me) {
       }
     }
   } RETRY(true);
+  //std::cout << "Transactions of thread[" << me << "] finished!" << std::endl;
 }
 
 template <int DS> bool InterferingRWs<DS>::check() {
