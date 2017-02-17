@@ -1,10 +1,12 @@
 #pragma once
 #include "TWrapped.hh"
 #include "TArrayProxy.hh"
+#include "Transaction.hh"
 #include "compiler.hh"
 #include "WriteLock.hh"
 #include "ContentionManager.hh"
 #include <limits.h>
+#include <pthread.h>
 #include <bitset>
 #include <fstream>
 
@@ -71,12 +73,7 @@ public:
 
     // transactional methods
     bool lock(TransItem& item, Transaction& txn) override {
-        //int threadid = txn.threadid();
-        //std::ofstream outfile;
-        //outfile.open(std::to_string(threadid), std::ios_base::app);
-        //outfile << "In the lock callback!" << std::endl;
         return txn.try_lock(item, data_[item.key<size_type>()].vers);
-        //outfile.close();
     }
     bool check(TransItem& item, Transaction&) override {
         return item.check_version(data_[item.key<size_type>()].vers);
@@ -276,34 +273,30 @@ inline TransProxy& TransProxy::add_swiss_write(T&& wdata, WriteLock& wlock) {
 
 template <typename T, typename... Args>
 inline TransProxy& TransProxy::add_swiss_write(Args&&... args, WriteLock& wlock) {
-    //std::cout << "Add swiss write: threadid=[" << t()->threadid() << "]" << std::endl; 
-    //int threadid = t()->threadid();
-    //std::ofstream outfile;
-    //outfile.open(std::to_string(threadid), std::ios_base::app);
     if (wlock.is_locked_here()) {
-        //printf("add_swiss_write: is locked here.\n");
         item().wdata_ = Packer<T>::repack(t()->buf_, item().wdata_, std::forward<Args>(args)...);
         return *this;
     }
 
-    //outfile << "Key = [" << item().key<unsigned>() << "]" << std::endl;
     while(true) {
         if (wlock.is_locked()) {
-            if (ContentionManager::should_abort(t(), wlock)) {
-                //outfile << "Result: Yes, abort." << std::endl;
+            bool aborted_by_others = false;
+            if (ContentionManager::should_abort(t(), wlock, aborted_by_others)) {
+                TXP_INCREMENT(txp_wwc_aborts);
+                if (aborted_by_others)
+                  TXP_INCREMENT(txp_aborted_by_others);
                 Sto::wwc_abort();
             } else {
-                //outfile << "Result: No. do not abort." << std::endl;
+                pthread_yield();
                 continue;
             }
         }
 
         if (wlock.try_lock()){
-            //outfile << "Lock aquired: threadid = [" << t()->threadid() << "]" << std::endl;
             break;
         }
-    }      
- 
+    }
+
 
     if (!has_write()) {
         item().__or_flags(TransItem::write_bit | TransItem::lock_bit);
@@ -317,7 +310,6 @@ inline TransProxy& TransProxy::add_swiss_write(Args&&... args, WriteLock& wlock)
         item().wdata_ = Packer<T>::repack(t()->buf_, item().wdata_, std::forward<Args>(args)...);
 
     ContentionManager::on_write(t());
-    //outfile.close();
     return *this;
 }
 

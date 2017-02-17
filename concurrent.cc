@@ -17,6 +17,7 @@
 #include "clp.h"
 #include "randgen.hh"
 #include "SwissTArray.hh"
+#include "SwissTGeneric.hh"
 
 #include "MassTrans.hh"
 
@@ -37,6 +38,7 @@
 #define USE_HASHTABLE_STR 9
 #define USE_ARRAY_NONOPAQUE 10
 #define USE_SWISSARRAY 11
+#define USE_SWISSGENERICARRAY 12
 
 // set this to USE_DATASTRUCTUREYOUWANT
 #define DATA_STRUCTURE USE_HASHTABLE
@@ -286,6 +288,31 @@ private:
     TGeneric stm_;
     value_type a_[ARRAY_SZ];
 };
+
+template <> struct Container<USE_SWISSGENERICARRAY> {
+    typedef int index_type;
+    static constexpr bool has_delete = false;
+    value_type nontrans_get(index_type key) {
+        return a_[key];
+    }
+    value_type transGet(index_type key) {
+        assert(key >= 0 && key < ARRAY_SZ);
+        return stm_.read(&a_[key]);
+    }
+    void transPut(index_type key, value_type value) {
+        assert(key >= 0 && key < ARRAY_SZ);
+        stm_.write(&a_[key], value);
+    }
+    static void init() {
+    }
+    static void thread_init(Container<USE_SWISSGENERICARRAY>&) {
+    }
+private:
+    SwissTNonopaqueGeneric stm_;
+    value_type a_[ARRAY_SZ];
+};
+
+
 
 template <> struct Container<USE_MASSTREE> {
 #if STRING_VALUES && UNBOXED_STRINGS
@@ -967,7 +994,9 @@ template <int DS> void InterferingRWs<DS>::run(int me) {
   TThread::set_id(me);
   container_type* a = this->a;
   container_type::thread_init(*a);
+  int N = ntrans / nthreads;
 
+  for (int j = 0; j < N; j++) {
   TRANSACTION {
     for (int i = 0; i < ARRAY_SZ; ++i) {
       if ((i % nthreads) >= me) {
@@ -976,6 +1005,7 @@ template <int DS> void InterferingRWs<DS>::run(int me) {
       }
     }
   } RETRY(true);
+  }
   //std::cout << "Transactions of thread[" << me << "] finished!" << std::endl;
 }
 
@@ -1103,6 +1133,7 @@ struct TesterPair {
 
 void* runfunc(void* x) {
     TesterPair* tp = (TesterPair*) x;
+    std::cout << "runfunc: id = " << tp->me << std::endl;
     tp->t->run(tp->me);
     return nullptr;
 }
@@ -1139,7 +1170,8 @@ void print_time(struct timeval tv1, struct timeval tv2) {
     {name, desc, 8, new type<8, ## __VA_ARGS__>},     \
     {name, desc, 9, new type<9, ## __VA_ARGS__>},     \
     {name, desc, 10, new type<10, ## __VA_ARGS__>},   \
-    {name, desc, 11, new type<11, ## __VA_ARGS__>}
+    {name, desc, 11, new type<11, ## __VA_ARGS__>},   \
+    {name, desc, 12, new type<12, ## __VA_ARGS__>}
 
 struct Test {
     const char* name;
@@ -1173,7 +1205,8 @@ struct {
     {"queue", USE_QUEUE},
     {"vector", USE_VECTOR},
     {"tvector", USE_TVECTOR},
-    {"swissarray", USE_SWISSARRAY}
+    {"swissarray", USE_SWISSARRAY},
+    {"swissgeneric", USE_SWISSGENERICARRAY}
 };
 
 enum {
@@ -1382,4 +1415,3 @@ int main(int argc, char *argv[]) {
   }
 #endif
 }
-

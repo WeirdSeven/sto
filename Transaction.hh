@@ -96,6 +96,9 @@ enum txp {
     txp_total_starts,
     txp_commit_time_nonopaque,
     txp_commit_time_aborts,
+    txp_observe_lock_aborts,
+    txp_wwc_aborts,
+    txp_aborted_by_others,
     txp_max_set,
     txp_hco,
     txp_hco_lock,
@@ -190,7 +193,7 @@ class Transaction {
 public:
     static constexpr unsigned tset_initial_capacity = 512;
 
-    static constexpr unsigned hash_size = 1024;
+    static constexpr unsigned hash_size = 32768;
     static constexpr unsigned hash_step = 5;
     using epoch_type = TRcuSet::epoch_type;
     using signed_epoch_type = TRcuSet::signed_epoch_type;
@@ -861,18 +864,11 @@ inline TransProxy& TransProxy::add_read_opaque(T rdata) {
 
 inline TransProxy& TransProxy::observe(TVersion version, bool add_read) {
     assert(!has_stash());
-    //int threadid = t()->threadid();
-    //std::ofstream outfile;
-    //outfile.open(std::to_string(threadid), std::ios_base::app);
-    //outfile << "A1" << std::endl;
     if (version.is_locked_elsewhere(t()->threadid_)) {
-        //outfile << "A2" << std::endl;
+        TXP_INCREMENT(txp_observe_lock_aborts);
         t()->abort_because(item(), "locked", version.value());
-        //outfile << "A3" << std::endl;
     }
-    //outfile << "A4" << std::endl;
     t()->check_opacity(item(), version.value());
-    //outfile << "A5" << std::endl;
     if (add_read && !has_read()) {
         item().__or_flags(TransItem::read_bit);
         item().rdata_ = Packer<TVersion>::pack(t()->buf_, std::move(version));
@@ -882,8 +878,10 @@ inline TransProxy& TransProxy::observe(TVersion version, bool add_read) {
 
 inline TransProxy& TransProxy::observe(TNonopaqueVersion version, bool add_read) {
     assert(!has_stash());
-    if (version.is_locked_elsewhere(t()->threadid_))
+    if (version.is_locked_elsewhere(t()->threadid_)) {
+        TXP_INCREMENT(txp_observe_lock_aborts);
         t()->abort_because(item(), "locked", version.value());
+    }
     if (add_read && !has_read()) {
         item().__or_flags(TransItem::read_bit);
         item().rdata_ = Packer<TNonopaqueVersion>::pack(t()->buf_, std::move(version));
@@ -894,8 +892,10 @@ inline TransProxy& TransProxy::observe(TNonopaqueVersion version, bool add_read)
 
 inline TransProxy& TransProxy::observe(TCommutativeVersion version, bool add_read) {
     assert(!has_stash());
-    if (version.is_locked())
+    if (version.is_locked()) {
+        TXP_INCREMENT(txp_observe_lock_aborts);
         t()->abort_because(item(), "locked", version.value());
+    }
     t()->check_opacity(item(), version.value());
     if (add_read && !has_read()) {
         item().__or_flags(TransItem::read_bit);
